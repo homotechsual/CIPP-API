@@ -12,20 +12,18 @@ Write-Host "PowerShell HTTP trigger function processed a request."
 
 # Interact with query parameters or the body of the request.
 $TenantFilter = $Request.Query.TenantFilter
-if ($TenantFilter) {
-    $RawGraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/beta/subscribedSkus" -tenantid $TenantFilter
+
+if ($TenantFilter -eq 'AllTenants') {
+    $GraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/beta/tenantRelationships/managedTenants/managedDeviceCompliances"    
 }
 else {
-    $RawGraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/beta/subscribedSkus"
-}
-$ConvertTable = Import-Csv Conversiontable.csv
-
-$GraphRequest = foreach ($SingleRequest in $RawGraphRequest) {
-    $prettyname = convert-skuname -skuname $($SingleRequest.skuPartNumber)
-    if ($prettyname) { $SingleRequest.skuPartNumber = $PrettyName }
-    $SingleRequest | Select-Object id, skuId, skuPartNumber, consumedUnits, @{ Name = 'availableUnits'; Expression = { $_.prepaidUnits.enabled - $_.consumedUnits } }
+    $GraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/beta/tenantRelationships/managedTenants/managedDeviceCompliances?`$top=999&`$filter=organizationId eq '$TenantFilter'"    
 }
 
+if ($GraphRequest.value.count -lt 1) { 
+    $StatusCode = [HttpStatusCode]::Forbidden
+    $GraphRequest = "No data found - This client might not be onboarded in Lighthouse" 
+}
 
 # Associate values to output bindings by calling 'Push-OutputBinding'.
 Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
